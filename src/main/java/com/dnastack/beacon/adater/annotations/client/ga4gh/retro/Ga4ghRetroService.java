@@ -1,10 +1,7 @@
 package com.dnastack.beacon.adater.annotations.client.ga4gh.retro;
 
-import ga4gh.*;
 import ga4gh.AlleleAnnotations.VariantAnnotationSet;
-import ga4gh.MetadataServiceOuterClass.SearchDatasetsResponse;
 import ga4gh.References.ReferenceSet;
-import ga4gh.VariantServiceOuterClass.SearchVariantSetsResponse;
 import ga4gh.VariantServiceOuterClass.SearchVariantsRequest;
 import ga4gh.VariantServiceOuterClass.SearchVariantsResponse;
 import ga4gh.Variants.CallSet;
@@ -17,9 +14,11 @@ import retrofit2.http.Path;
 
 /**
  * @author Artem (tema.voskoboynick@gmail.com)
+ * @author Miro Cupak (mirocupak@gmail.com)
  * @version 1.0
  */
 public interface Ga4ghRetroService {
+
     String VARIANTS_SEARCH_PATH = "variants/search";
     String VARIANT_ANNOTATIONS_SETS_GET_PATH = "variantannotationsets";
     String VARIANT_SETS_GET_PATH = "variantsets";
