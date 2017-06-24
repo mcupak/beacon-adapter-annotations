@@ -3,6 +3,7 @@ package com.dnastack.beacon.adater.annotations;
 import com.dnastack.beacon.adapter.api.BeaconAdapter;
 import com.dnastack.beacon.adater.annotations.client.ga4gh.Ga4ghClient;
 import com.dnastack.beacon.adater.annotations.client.ga4gh.exceptions.Ga4ghClientException;
+import com.dnastack.beacon.adater.annotations.client.ga4gh.model.Ga4ghClientRequest;
 import com.dnastack.beacon.exceptions.BeaconAlleleRequestException;
 import com.dnastack.beacon.exceptions.BeaconException;
 import com.dnastack.beacon.utils.AdapterConfig;
@@ -16,7 +17,7 @@ import ga4gh.Variants.CallSet;
 import ga4gh.Variants.Variant;
 import ga4gh.Variants.VariantSet;
 import org.apache.commons.collections.CollectionUtils;
-import org.apache.commons.lang.BooleanUtils;
+import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.ga4gh.beacon.*;
 
@@ -37,19 +38,21 @@ import java.util.stream.Stream;
  */
 public class AnnotationsBeaconAdapter implements BeaconAdapter {
 
-    public static final Beacon SAMPLE_BEACON = Beacon.newBuilder()
-                                                     .setId("sample-beacon")
-                                                     .setName("Sample Beacon")
-                                                     .setApiVersion("0.3.0")
-                                                     .setCreateDateTime("01.01.2016")
-                                                     .setUpdateDateTime("01.01.2016")
-                                                     .setOrganization(BeaconOrganization.newBuilder()
-                                                                                        .setId("sample-organization")
-                                                                                        .setName("Sample Organization")
-                                                                                        .build())
-                                                     .build();
+    public static final String DEFAULT_BASE_URL = "http://1kgenomes.ga4gh.org/";
 
-    private Ga4ghClient ga4ghClient = new Ga4ghClient();
+    public static final Beacon SAMPLE_BEACON = Beacon.newBuilder()
+            .setId("sample-beacon")
+            .setName("Sample Beacon")
+            .setApiVersion("0.3.0")
+            .setCreateDateTime("01.01.2016")
+            .setUpdateDateTime("01.01.2016")
+            .setOrganization(BeaconOrganization.newBuilder()
+                    .setId("sample-organization")
+                    .setName("Sample Organization")
+                    .build())
+            .build();
+
+    private Ga4ghClient ga4ghClient;
 
     /**
      * Copy of the the Java 8 function, but can throw {@link BeaconAlleleRequestException}.
@@ -61,65 +64,94 @@ public class AnnotationsBeaconAdapter implements BeaconAdapter {
     }
 
     private void initGa4ghClient(AdapterConfig adapterConfig) {
-        String ga4ghBaseUrl = getGa4ghBaseUrl(adapterConfig);
-        ga4ghClient = ga4ghBaseUrl == null ? new Ga4ghClient() : new Ga4ghClient(ga4ghBaseUrl);
+        ga4ghClient = new Ga4ghClient(Ga4ghClientRequest.builder()
+                .withBaseUrl(getGa4ghBaseUrl(adapterConfig))
+                .withApiKey(getGa4ghApiKey(adapterConfig))
+                .build());
     }
 
     private String getGa4ghBaseUrl(AdapterConfig adapterConfig) {
         List<ConfigValue> configValues = adapterConfig.getConfigValues();
         ConfigValue ga4ghBaseUrl = Iterables.getFirst(configValues, null);
-        return ga4ghBaseUrl == null ? null : ga4ghBaseUrl.getValue();
+        return ga4ghBaseUrl == null ? DEFAULT_BASE_URL : ga4ghBaseUrl.getValue();
     }
 
-    private BeaconAlleleRequest createRequest(String referenceName, Long start, String referenceBases, String alternateBases, String assemblyId, List<String> datasetIds, Boolean includeDatasetResponses) {
+    private String getGa4ghApiKey(AdapterConfig adapterConfig) {
+        List<ConfigValue> configValues = adapterConfig.getConfigValues();
+
+        for (ConfigValue configValue : configValues) {
+            if (configValue.getName().equals("key")) {
+                return configValue.getValue();
+            }
+        }
+
+        return null;
+    }
+
+    private BeaconAlleleRequest createRequest(String referenceName,
+                                              Long start,
+                                              String referenceBases,
+                                              String alternateBases,
+                                              String assemblyId,
+                                              List<String> datasetIds,
+                                              Boolean includeDatasetResponses) {
         return BeaconAlleleRequest.newBuilder()
-                                  .setReferenceName(referenceName)
-                                  .setStart(start)
-                                  .setReferenceBases(referenceBases)
-                                  .setAlternateBases(alternateBases)
-                                  .setAssemblyId(assemblyId)
-                                  .setDatasetIds(datasetIds)
-                                  .setIncludeDatasetResponses(includeDatasetResponses)
-                                  .build();
+                .setReferenceName(referenceName)
+                .setStart(start)
+                .setReferenceBases(referenceBases)
+                .setAlternateBases(alternateBases)
+                .setAssemblyId(assemblyId)
+                .setDatasetIds(datasetIds)
+                .setIncludeDatasetResponses(includeDatasetResponses)
+                .build();
     }
 
-    private BeaconAlleleResponse doGetBeaconAlleleResponse(String referenceName, Long start, String referenceBases, String alternateBases, String assemblyId, List<String> datasetIds, Boolean includeDatasetResponses) throws BeaconException {
+    private BeaconAlleleResponse doGetBeaconAlleleResponse(String referenceName,
+                                                           Long start,
+                                                           String referenceBases,
+                                                           String alternateBases,
+                                                           String assemblyId,
+                                                           List<String> datasetIds,
+                                                           Boolean includeDatasetResponses) throws BeaconException {
         List<BeaconDatasetAlleleResponse> datasetResponses = map(datasetIds,
-                                                                 datasetId -> getDatasetResponse(datasetId,
-                                                                                                 assemblyId,
-                                                                                                 referenceName,
-                                                                                                 start,
-                                                                                                 referenceBases,
-                                                                                                 alternateBases));
+                datasetId -> getDatasetResponse(datasetId,
+                        assemblyId,
+                        referenceName,
+                        start,
+                        referenceBases,
+                        alternateBases));
         // Dataset response is null if no matching variant set could be found.
         datasetResponses.removeIf(Objects::isNull);
 
         List<BeaconDatasetAlleleResponse> returnedDatasetResponses = BooleanUtils.isTrue(includeDatasetResponses)
-                                                                     ? datasetResponses
-                                                                     : null;
+                ? datasetResponses
+                : null;
 
         BeaconError anyError = datasetResponses.stream()
-                                               .map(BeaconDatasetAlleleResponse::getError)
-                                               .filter(error -> error != null)
-                                               .findAny()
-                                               .orElseGet(() -> null);
+                .map(BeaconDatasetAlleleResponse::getError)
+                .filter(Objects::nonNull)
+                .findAny()
+                .orElse(null);
 
         Boolean exists = anyError != null
-                         ? null
-                         : datasetResponses.stream().anyMatch(BeaconDatasetAlleleResponse::getExists);
+                ? null
+                : datasetResponses.stream().anyMatch(BeaconDatasetAlleleResponse::getExists);
 
-        BeaconAlleleResponse response = BeaconAlleleResponse.newBuilder()
-                                                            .setAlleleRequest(null)
-                                                            .setDatasetAlleleResponses(returnedDatasetResponses)
-                                                            .setBeaconId(SAMPLE_BEACON.getId())
-                                                            .setError(anyError)
-                                                            .setExists(exists)
-                                                            .build();
-
-        return response;
+        return BeaconAlleleResponse.newBuilder()
+                .setAlleleRequest(null)
+                .setDatasetAlleleResponses(returnedDatasetResponses)
+                .setBeaconId(SAMPLE_BEACON.getId())
+                .setError(anyError)
+                .setExists(exists)
+                .build();
     }
 
-    private BeaconDatasetAlleleResponse getDatasetResponse(String datasetId, String assemblyId, String referenceName, long start, String referenceBases, String alternateBases) throws BeaconAlleleRequestException {
+    private BeaconDatasetAlleleResponse getDatasetResponse(String datasetId,
+                                                           String assemblyId,
+                                                           String referenceName,
+                                                           long start,
+                                                           String referenceBases,
+                                                           String alternateBases) throws BeaconAlleleRequestException {
         VariantSet variantSet = getVariantSetToSearch(datasetId, assemblyId);
         if (variantSet == null) {
             // No matching variant set.
@@ -127,52 +159,49 @@ public class AnnotationsBeaconAdapter implements BeaconAdapter {
         }
 
         List<Variant> variants = loadVariants(variantSet.getId(), referenceName, start).stream()
-                                                                                       .filter(variant -> isVariantMatchesRequested(
-                                                                                               variant,
-                                                                                               referenceBases,
-                                                                                               alternateBases))
-                                                                                       .collect(Collectors.toList());
+                .filter(variant -> isVariantMatchesRequested(
+                        variant,
+                        referenceBases,
+                        alternateBases))
+                .collect(Collectors.toList());
 
         Double frequency = calculateFrequency(alternateBases, variants);
 
         Long sampleCount = countSamples(variants);
 
-        Long callsCount = variants.stream().collect(Collectors.summingLong(Variant::getCallsCount));
+        Long callsCount = variants.stream().mapToLong(Variant::getCallsCount).sum();
 
         long variantCount = (long) variants.size();
 
         boolean exists = CollectionUtils.isNotEmpty(variants);
 
-        BeaconDatasetAlleleResponse datasetResponse = BeaconDatasetAlleleResponse.newBuilder()
-                                                                                 .setDatasetId(datasetId)
-                                                                                 .setFrequency(frequency)
-                                                                                 .setCallCount(callsCount)
-                                                                                 .setVariantCount(variantCount)
-                                                                                 .setSampleCount(sampleCount)
-                                                                                 .setExists(exists)
-                                                                                 .build();
-        return datasetResponse;
+        return BeaconDatasetAlleleResponse.newBuilder()
+                .setDatasetId(datasetId)
+                .setFrequency(frequency)
+                .setCallCount(callsCount)
+                .setVariantCount(variantCount)
+                .setSampleCount(sampleCount)
+                .setExists(exists)
+                .build();
     }
 
     private Long countSamples(List<Variant> variants) throws BeaconAlleleRequestException {
         Stream<String> callSetIds = variants.stream()
-                                            .flatMap(variant -> variant.getCallsList().stream())
-                                            .map(Variants.Call::getCallSetId);
+                .flatMap(variant -> variant.getCallsList().stream())
+                .map(Variants.Call::getCallSetId);
 
-        long sampleCount = map(callSetIds, this::loadCallSet).stream().map(CallSet::getBioSampleId).distinct().count();
-
-        return sampleCount;
+        return map(callSetIds, this::loadCallSet).stream().map(CallSet::getBiosampleId).distinct().count();
     }
 
     private Double calculateFrequency(String alternateBases, List<Variant> variants) {
         Long matchingGenotypesCount = variants.stream()
-                                              .mapToLong(variant -> calculateMatchingGenotypesCount(variant,
-                                                                                                    alternateBases))
-                                              .sum();
+                .mapToLong(variant -> calculateMatchingGenotypesCount(variant,
+                        alternateBases))
+                .sum();
 
         Long totalGenotypesCount = variants.stream()
-                                           .flatMap(variant -> variant.getCallsList().stream())
-                                           .collect(Collectors.summingLong(Variants.Call::getGenotypeCount));
+                .flatMap(variant -> variant.getCallsList().stream())
+                .mapToLong(Variants.Call::getGenotypeLikelihoodCount).sum();
 
         return (totalGenotypesCount == 0) ? null : ((double) matchingGenotypesCount / totalGenotypesCount);
     }
@@ -180,11 +209,11 @@ public class AnnotationsBeaconAdapter implements BeaconAdapter {
     private long calculateMatchingGenotypesCount(Variant variant, String alternateBases) {
         int requestedGenotype = variant.getAlternateBasesList().indexOf(alternateBases) + 1;
         return variant.getCallsList()
-                      .stream()
-                      .map(Variants.Call::getGenotypeList)
-                      .flatMap(List::stream)
-                      .filter(genotype -> genotype.equals(requestedGenotype))
-                      .count();
+                .stream()
+                .map(Variants.Call::getGenotypeLikelihoodList)
+                .flatMap(List::stream)
+                .filter(genotype -> genotype.equals(Double.valueOf(requestedGenotype)))
+                .count();
     }
 
     private VariantSet getVariantSetToSearch(String datasetId, String assemblyId) throws BeaconAlleleRequestException {
@@ -204,7 +233,7 @@ public class AnnotationsBeaconAdapter implements BeaconAdapter {
 
     private boolean isVariantMatchesRequested(Variant variant, String referenceBases, String alternateBases) {
         return StringUtils.equals(variant.getReferenceBases(), referenceBases) && variant.getAlternateBasesList()
-                                                                                         .contains(alternateBases);
+                .contains(alternateBases);
     }
 
     private List<Variant> loadVariants(String variantSetId, String referenceName, long start) throws BeaconAlleleRequestException {
@@ -284,12 +313,12 @@ public class AnnotationsBeaconAdapter implements BeaconAdapter {
     public BeaconAlleleResponse getBeaconAlleleResponse(BeaconAlleleRequest request) throws BeaconException {
         try {
             BeaconAlleleResponse response = doGetBeaconAlleleResponse(request.getReferenceName(),
-                                                                      request.getStart(),
-                                                                      request.getReferenceBases(),
-                                                                      request.getAlternateBases(),
-                                                                      request.getAssemblyId(),
-                                                                      request.getDatasetIds(),
-                                                                      request.getIncludeDatasetResponses());
+                    request.getStart(),
+                    request.getReferenceBases(),
+                    request.getAlternateBases(),
+                    request.getAssemblyId(),
+                    request.getDatasetIds(),
+                    request.getIncludeDatasetResponses());
             response.setAlleleRequest(request);
             return response;
         } catch (BeaconAlleleRequestException e) {
@@ -299,14 +328,20 @@ public class AnnotationsBeaconAdapter implements BeaconAdapter {
     }
 
     @Override
-    public BeaconAlleleResponse getBeaconAlleleResponse(String referenceName, Long start, String referenceBases, String alternateBases, String assemblyId, List<String> datasetIds, Boolean includeDatasetResponses) throws BeaconException {
+    public BeaconAlleleResponse getBeaconAlleleResponse(String referenceName,
+                                                        Long start,
+                                                        String referenceBases,
+                                                        String alternateBases,
+                                                        String assemblyId,
+                                                        List<String> datasetIds,
+                                                        Boolean includeDatasetResponses) throws BeaconException {
         BeaconAlleleRequest request = createRequest(referenceName,
-                                                    start,
-                                                    referenceBases,
-                                                    alternateBases,
-                                                    assemblyId,
-                                                    datasetIds,
-                                                    includeDatasetResponses);
+                start,
+                referenceBases,
+                alternateBases,
+                assemblyId,
+                datasetIds,
+                includeDatasetResponses);
         return getBeaconAlleleResponse(request);
     }
 
