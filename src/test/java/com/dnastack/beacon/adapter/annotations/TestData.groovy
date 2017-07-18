@@ -1,5 +1,8 @@
 package com.dnastack.beacon.adapter.annotations
 
+import com.google.protobuf.ListValue
+import com.google.protobuf.Value
+
 import static ga4gh.AlleleAnnotations.VariantAnnotationSet
 import static ga4gh.References.ReferenceSet
 import static ga4gh.VariantServiceOuterClass.SearchVariantsRequest
@@ -24,12 +27,16 @@ public class TestData {
 
     def public static final TEST_CALL_1 = Call.newBuilder()
             .setCallSetId(TEST_CALL_SET_1.id)
-            .addAllGenotypeLikelihood([Double.valueOf(1), Double.valueOf(2)])
+            .setGenotype(ListValue.newBuilder()
+            .addValues(Value.newBuilder().setNumberValue(1.0))
+            .addValues(Value.newBuilder().setNumberValue(2.0)))
             .build()
 
     def public static final TEST_CALL_2 = Call.newBuilder()
             .setCallSetId(TEST_CALL_SET_2.id)
-            .addAllGenotypeLikelihood([Double.valueOf(3), Double.valueOf(4)])
+            .setGenotype(ListValue.newBuilder()
+            .addValues(Value.newBuilder().setNumberValue(3.0))
+            .addValues(Value.newBuilder().setNumberValue(4.0)))
             .build()
 
     def public static final TEST_VARIANT = Variant.newBuilder()
